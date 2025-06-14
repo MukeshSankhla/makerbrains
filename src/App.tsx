@@ -31,6 +31,7 @@ import ManageMagazines from "./pages/ManageMagazines";
 import ManageSponsors from "./pages/ManageSponsors";
 import Contact from "./pages/ContactUs";
 import { useAdminAuth } from "./contexts/AdminAuthContext";
+import ManageHomeContent from "./pages/ManageHomeContent";
 
 const queryClient = new QueryClient();
 
@@ -116,6 +117,11 @@ const App = () => (
                         <Route path="/manage-sponsors" element={
                           <ProtectedRoute>
                             <ManageSponsors />
+                          </ProtectedRoute>
+                        } />
+                        <Route path="/manage-home-content" element={
+                          <ProtectedRoute>
+                            <ManageHomeContent />
                           </ProtectedRoute>
                         } />
                       </Routes>

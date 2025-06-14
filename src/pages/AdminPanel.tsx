@@ -48,7 +48,7 @@ const AdminPanel = () => {
         { 
           label: "Manage Home Content", 
           icon: Settings, 
-          link: "/manage-achievements",
+          link: "/manage-home-content",
           color: "text-purple-600"
         },
       ],

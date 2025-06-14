@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db } from "@/config/firebase";
 import {
@@ -13,7 +12,13 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 
-// Project type matches old interface for compatibility
+// Define Step type
+type Step = {
+  title: string;
+  content: string; // can be rich text
+};
+
+// Update Project type to include steps (array of Step)
 export interface Project {
   id: string;
   title: string;
@@ -23,6 +28,7 @@ export interface Project {
   url?: string;
   author: string;
   date: string;
+  steps: Step[]; // <-- Added
 }
 
 interface ProjectContextType {
@@ -54,6 +60,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             url: d.url || "",
             author: d.author,
             date: d.date || (d.createdAt?.toDate?.().toLocaleDateString?.('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? ""),
+            steps: d.steps || [], // <-- Added
           }
         });
         setProjects(data);

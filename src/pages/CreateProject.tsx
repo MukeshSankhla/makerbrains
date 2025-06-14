@@ -50,7 +50,7 @@ const CreateProject = () => {
       author: "",
       image: "",
       url: "",
-      steps: [DEFAULT_STEP],
+      steps: [{ title: "", content: "" }],
     },
     mode: "onBlur",
   });
@@ -70,9 +70,27 @@ const CreateProject = () => {
     name: "steps",
   });
 
+  // ----> Ensure all required fields before calling addProject
   const onSubmit = async (values: ProjectFormValues) => {
+    // Enforce all required step keys
+    const steps = values.steps.map((s) => ({
+      title: s.title ?? "",
+      content: s.content ?? "",
+    }));
+
+    const cleanVals = {
+      ...values,
+      title: values.title ?? "",
+      description: values.description ?? "",
+      content: values.content ?? "",
+      author: values.author ?? "",
+      image: values.image ?? "",
+      url: values.url ?? "",
+      steps,
+    };
+
     try {
-      await addProject(values);
+      await addProject(cleanVals); // satisfies Omit<Project, "id" | "date">
       toast({
         title: "Success",
         description: "Project created successfully!",
@@ -198,21 +216,22 @@ const CreateProject = () => {
                   <FormLabel>
                     Project Steps <span className="text-destructive">*</span>
                   </FormLabel>
-                  {/* Validation for steps array */}
                   {errors?.steps?.message && (
                     <FormMessage>{errors.steps.message as string}</FormMessage>
                   )}
-                  {/* Render each step via StepEditor */}
                   {fields.map((item, idx) => (
                     <div key={item.id} className="flex flex-col gap-1 mb-3">
                       <StepEditor
                         index={idx}
-                        step={getValues(`steps.${idx}`)}
+                        // All steps always filled
+                        step={{
+                          title: getValues(`steps.${idx}.title`) ?? "",
+                          content: getValues(`steps.${idx}.content`) ?? ""
+                        }}
                         onChange={(i, updatedStep) => update(i, updatedStep)}
                         onRemove={() => remove(idx)}
                         showRemove={fields.length > 1}
                       />
-                      {/* Field-level validation errors for this step */}
                       {(errors.steps?.[idx]?.title || errors.steps?.[idx]?.content) && (
                         <FormMessage>
                           {errors.steps?.[idx]?.title?.message || errors.steps?.[idx]?.content?.message}

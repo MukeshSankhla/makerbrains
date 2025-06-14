@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
@@ -6,15 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { Edit, Trash2, PlusCircle, Search, Upload } from "lucide-react";
 import { useAdminAuth } from "@/contexts/AdminAuthContext";
 import { Helmet } from "react-helmet-async";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { db, storage } from "@/config/firebase";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, orderBy, query } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 interface Sponsor {
-  id: number;
+  id: string;
   name: string;
   website_url: string;
   image_url: string;
@@ -30,7 +31,7 @@ const ManageSponsors = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  
+
   const [newSponsor, setNewSponsor] = useState<Omit<Sponsor, 'id'>>({
     name: "",
     website_url: "",
@@ -38,23 +39,16 @@ const ManageSponsors = () => {
   });
   const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
 
-  // Redirect if not admin
   useEffect(() => {
-    if (!isAdmin) {
-      navigate("/maker-admin-access");
-    }
+    if (!isAdmin) navigate("/maker-admin-access");
   }, [isAdmin, navigate]);
 
-  // Fetch sponsors
   useEffect(() => {
     const fetchSponsors = async () => {
       try {
-        const { data, error } = await supabase
-          .from('sponsors')
-          .select('*');
-
-        if (error) throw error;
-        setSponsors(data || []);
+        const sponsorsQuery = query(collection(db, "sponsors"), orderBy("name", "asc"));
+        const querySnapshot = await getDocs(sponsorsQuery);
+        setSponsors(querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Sponsor)));
       } catch (error) {
         console.error('Error fetching sponsors:', error);
         toast({
@@ -66,44 +60,30 @@ const ManageSponsors = () => {
         setIsLoading(false);
       }
     };
-
     fetchSponsors();
   }, [toast]);
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean = false) => {
+  // Firebase Storage image upload
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    isEdit: boolean = false
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsUploading(true);
-    
+
     try {
-      // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2, 15)}-${Date.now()}.${fileExt}`;
-      const filePath = `sponsor-logos/${fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('maker-images')
-        .upload(filePath, file);
-      
-      if (uploadError) {
-        throw uploadError;
+      const fileName = `sponsor-logos/${Date.now()}-${file.name}`;
+      const fileRef = ref(storage, fileName);
+      await uploadBytes(fileRef, file);
+      const imageUrl = await getDownloadURL(fileRef);
+      if (isEdit && editingSponsor) {
+        setEditingSponsor({ ...editingSponsor, image_url: imageUrl });
+      } else {
+        setNewSponsor((prev) => ({ ...prev, image_url: imageUrl }));
       }
-      
-      // Get public URL
-      const { data } = supabase.storage
-        .from('maker-images')
-        .getPublicUrl(filePath);
-      
-      if (data && data.publicUrl) {
-        if (isEdit && editingSponsor) {
-          setEditingSponsor({...editingSponsor, image_url: data.publicUrl});
-        } else {
-          setNewSponsor({...newSponsor, image_url: data.publicUrl});
-        }
-      }
-    } catch (error) {
-      console.error("Error uploading image:", error);
+    } catch (err) {
+      console.error("Error uploading image to Firebase:", err);
       toast({
         title: "Upload failed",
         description: "Could not upload the image. Please try again.",
@@ -123,27 +103,17 @@ const ManageSponsors = () => {
       });
       return;
     }
-    
+
     try {
-      const { data, error } = await supabase
-        .from('sponsors')
-        .insert([newSponsor])
-        .select();
-
-      if (error) throw error;
-
-      setSponsors([...(data || []), ...sponsors]);
-      setNewSponsor({
-        name: "",
-        website_url: "",
-        image_url: "",
-      });
+      const docRef = await addDoc(collection(db, "sponsors"), newSponsor);
+      setSponsors([{ id: docRef.id, ...newSponsor }, ...sponsors]);
+      setNewSponsor({ name: "", website_url: "", image_url: "" });
       toast({
         title: "Success",
         description: "Sponsor created successfully",
       });
     } catch (error) {
-      console.error('Error creating sponsor:', error);
+      console.error("Error creating sponsor:", error);
       toast({
         title: "Error",
         description: "Failed to create sponsor",
@@ -154,19 +124,12 @@ const ManageSponsors = () => {
 
   const handleUpdate = async () => {
     if (!editingSponsor) return;
-
     try {
-      const { error } = await supabase
-        .from('sponsors')
-        .update({
-          name: editingSponsor.name,
-          website_url: editingSponsor.website_url,
-          image_url: editingSponsor.image_url,
-        })
-        .eq('id', editingSponsor.id);
-
-      if (error) throw error;
-
+      await updateDoc(doc(db, "sponsors", editingSponsor.id), {
+        name: editingSponsor.name,
+        website_url: editingSponsor.website_url,
+        image_url: editingSponsor.image_url,
+      });
       setSponsors(sponsors.map(spons => 
         spons.id === editingSponsor.id ? editingSponsor : spons
       ));
@@ -176,7 +139,7 @@ const ManageSponsors = () => {
         description: "Sponsor updated successfully",
       });
     } catch (error) {
-      console.error('Error updating sponsor:', error);
+      console.error("Error updating sponsor:", error);
       toast({
         title: "Error",
         description: "Failed to update sponsor",
@@ -185,26 +148,19 @@ const ManageSponsors = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this sponsor? This action cannot be undone.")) {
       return;
     }
-
     try {
-      const { error } = await supabase
-        .from('sponsors')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
+      await deleteDoc(doc(db, "sponsors", id));
       setSponsors(sponsors.filter(spons => spons.id !== id));
       toast({
         title: "Success",
         description: "Sponsor deleted successfully",
       });
     } catch (error) {
-      console.error('Error deleting sponsor:', error);
+      console.error("Error deleting sponsor:", error);
       toast({
         title: "Error",
         description: "Failed to delete sponsor",
@@ -473,5 +429,4 @@ const ManageSponsors = () => {
     </>
   );
 };
-
 export default ManageSponsors;

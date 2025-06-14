@@ -1,0 +1,72 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* #FFFFFF */
+    --foreground: 0 0% 0%; /* #000000 */
+    --card: 0 0% 95%; /* #f2f2f2 */
+    --card-foreground: 0 0% 0%; /* #000000 */
+    --popover: 0 0% 100%; /* #FFFFFF */
+    --popover-foreground: 0 0% 0%; /* #000000 */
+    --muted: 0 0% 96%; /* #f5f5f5 */
+    --muted-foreground: 0 0% 46%; /* #757575 */
+    --accent: 199 100% 50%; /* #03a9f4 */
+    --accent-foreground: 0 0% 100%; /* #FFFFFF */
+    --border: 0 0% 90%; /* #e6e6e6 */
+    --input: 0 0% 90%; /* #e6e6e6 */
+    --ring: 199 100% 50%; /* #03a9f4 */
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 0 0% 13%; /* #212121 */
+    --foreground: 0 0% 100%; /* #FFFFFF */
+    --card: 0 0% 18%; /* #2f2f2f */
+    --card-foreground: 0 0% 100%; /* #FFFFFF */
+    --popover: 0 0% 13%; /* #212121 */
+    --popover-foreground: 0 0% 100%; /* #FFFFFF */
+    --muted: 0 0% 20%; /* #333333 */
+    --muted-foreground: 0 0% 65%; /* #a6a6a6 */
+    --accent: 199 100% 50%; /* #03a9f4 */
+    --accent-foreground: 0 0% 100%; /* #FFFFFF */
+    --border: 0 0% 20%; /* #333333 */
+    --input: 0 0% 20%; /* #333333 */
+    --ring: 199 100% 50%; /* #03a9f4 */
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .tech-icon {
+    @apply bg-maker-lightgray dark:bg-maker-darkgray rounded-lg p-3 transition-all hover:scale-110;
+  }
+  
+  .sponsor-card {
+    @apply backdrop-blur-md bg-white/10 dark:bg-black/20 border border-white/20 dark:border-white/10 rounded-xl transition-all hover:shadow-lg hover:shadow-primary/20;
+  }
+  
+  .circuit-path {
+    @apply stroke-primary stroke-[1px] stroke-dasharray-[10,10] animate-flow fill-none;
+  }
+  
+  .section-heading {
+    @apply text-4xl font-bold relative inline-block mb-8;
+  }
+  
+  .section-heading::after {
+    content: "";
+    @apply absolute bottom-1 left-0 w-full h-3 bg-primary/20 -rotate-1 -z-10;
+  }
+}
+

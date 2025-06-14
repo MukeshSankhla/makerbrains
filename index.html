@@ -1,0 +1,51 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Maker Brains</title>
+    <meta name="description" content="Maker Brains - Mukesh Sankhla's Engineering Projects & Innovations" />
+    <meta name="author" content="Mukesh Sankhla" />
+    <meta property="og:image" content="og-image.png" />
+    <meta property="og:title" content="Maker Brains" />
+    <meta property="og:description" content="Explore engineering projects, innovations, and maker adventures" />
+    <meta name="theme-color" content="#03a9f4" />
+    <link rel="preconnect" href="https://dkmbrsufkhbrmpyaeylc.supabase.co" />
+    <link rel="dns-prefetch" href="https://dkmbrsufkhbrmpyaeylc.supabase.co" />
+    
+    <!-- Preloading critical assets -->
+    <link rel="preload" as="font" href="/fonts/inter.woff2" type="font/woff2" crossorigin />
+    
+    <!-- Add a JSON-LD script for SEO -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Maker Brains",
+        "url": "https://makerbrains.com",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://makerbrains.com/search?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      }
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script>
+      // Register service worker for caching
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(reg => console.log('Service Worker registered:', reg))
+            .catch(err => console.log('Service Worker registration failed:', err));
+        });
+      }
+    </script>
+    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

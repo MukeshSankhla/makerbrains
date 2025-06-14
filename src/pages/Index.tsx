@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProjects, Project } from "@/pages/ProjectContext";
 import { Link } from "react-router-dom";
@@ -15,7 +14,7 @@ const Index = () => {
   const [predefinedProjects, setPredefinedProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasMoreProjects, setHasMoreProjects] = useState(true);
-  const [lastLoadedId, setLastLoadedId] = useState<number | null>(null);
+  const [lastLoadedId, setLastLoadedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   
   // Fetch projects with simplified error handling
@@ -31,7 +30,7 @@ const Index = () => {
       
       // Set limits for pagination
       if (isInitial) {
-        query = query.limit(9); // Load more initially to ensure content is visible
+        query = query.limit(9); // Load more initially
       } else if (lastLoadedId !== null) {
         query = query.lt('id', lastLoadedId).limit(6);
       }
@@ -44,7 +43,17 @@ const Index = () => {
       }
       
       if (data) {
-        const projects = data as Project[];
+        // Fix: Convert all ids to strings
+        const projects: Project[] = (data as any[]).map((row) => ({
+          id: String(row.id),
+          title: row.title,
+          description: row.description,
+          content: row.content || "",
+          image: row.image,
+          url: row.url || "",
+          author: row.author,
+          date: row.date || "",
+        }));
         console.log(`Fetched ${projects.length} projects`, projects);
         
         if (isInitial) {

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +9,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import { useProjects } from "@/pages/ProjectContext";
+import StepEditor from "@/components/StepEditor";
 
 const CreateProject = () => {
   const { addProject } = useProjects();
@@ -20,9 +20,24 @@ const CreateProject = () => {
   const [image, setImage] = useState("");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [steps, setSteps] = useState([{ title: "", content: "" }]);
 
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  const handleStepChange = (idx: number, updatedStep: { title: string; content: string }) => {
+    setSteps(steps =>
+      steps.map((step, i) => (i === idx ? updatedStep : step))
+    );
+  };
+
+  const handleAddStep = () => {
+    setSteps(steps => [...steps, { title: "", content: "" }]);
+  };
+
+  const handleRemoveStep = (idx: number) => {
+    setSteps(steps => steps.filter((_, i) => i !== idx));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,11 +53,26 @@ const CreateProject = () => {
       return;
     }
 
+    // Check steps
+    if (
+      !steps.length ||
+      steps.some(step => !step.title.trim() || !step.content.trim())
+    ) {
+      toast({
+        title: "Error",
+        description: "Please add details for each step.",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       await addProject({
         title,
         description,
         content,
+        steps, // Save steps as an array in Firestore
         image,
         url,
         author,
@@ -132,6 +162,29 @@ const CreateProject = () => {
                   onChange={e => setUrl(e.target.value)}
                 />
               </div>
+              <div>
+                <Label>Project Steps <span className="text-destructive">*</span></Label>
+                <div>
+                  {steps.map((step, idx) => (
+                    <StepEditor
+                      key={idx}
+                      index={idx}
+                      step={step}
+                      onChange={handleStepChange}
+                      onRemove={handleRemoveStep}
+                      showRemove={steps.length > 1}
+                    />
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleAddStep}
+                    className="mt-1"
+                  >
+                    + Add Step
+                  </Button>
+                </div>
+              </div>
               <Button
                 className="w-full"
                 type="submit"
@@ -158,4 +211,3 @@ const CreateProject = () => {
 };
 
 export default CreateProject;
-

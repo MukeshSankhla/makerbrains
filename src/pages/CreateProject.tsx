@@ -1,272 +1,299 @@
 
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
-import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Form, FormItem, FormLabel, FormControl, FormDescription, FormMessage, FormField } from "@/components/ui/form";
-import { useForm, useFieldArray } from "react-hook-form";
-import * as z from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useProjects } from "@/pages/ProjectContext";
-import StepEditor from "@/components/StepEditor";
-import React from "react";
-
-const projectFormSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  content: z.string().optional(),
-  author: z.string().min(2, "Author is required"),
-  image: z.string().url("Must be a valid image URL"),
-  url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
-  steps: z
-    .array(
-      z.object({
-        title: z.string().min(2, "Title required"),
-        content: z.string().min(5, "Step details required"),
-      })
-    )
-    .min(1, "At least one step is required"),
-});
-
-type ProjectFormValues = z.infer<typeof projectFormSchema>;
-
-const DEFAULT_STEP = { title: "", content: "" };
+import { Loader2, Upload, Calendar as CalendarIcon } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Helmet } from "react-helmet-async";
+import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 const CreateProject = () => {
-  const { addProject } = useProjects();
-  const { toast } = useToast();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [image, setImage] = useState("");
+  const [url, setUrl] = useState("");
+  const [author, setAuthor] = useState("Mukesh Sankhla"); // Default author
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [publishDate, setPublishDate] = useState<Date | undefined>(new Date());
 
-  const form = useForm<ProjectFormValues>({
-    resolver: zodResolver(projectFormSchema),
-    defaultValues: {
-      title: "",
-      description: "",
-      content: "",
-      author: "",
-      image: "",
-      url: "",
-      steps: [{ title: "", content: "" }],
-    },
-    mode: "onBlur",
-  });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!title || !description || !url) {
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const {
-    control,
-    register,
-    reset,
-    setValue,
-    getValues,
-    handleSubmit,
-    formState: { isSubmitting, errors }
-  } = form;
-
-  const { fields, append, remove, update } = useFieldArray({
-    control,
-    name: "steps",
-  });
-
-  // ----> Ensure all required fields before calling addProject
-  const onSubmit = async (values: ProjectFormValues) => {
-    // Enforce all required step keys
-    const steps = values.steps.map((s) => ({
-      title: s.title ?? "",
-      content: s.content ?? "",
-    }));
-
-    const cleanVals = {
-      ...values,
-      title: values.title ?? "",
-      description: values.description ?? "",
-      content: values.content ?? "",
-      author: values.author ?? "",
-      image: values.image ?? "",
-      url: values.url ?? "",
-      steps,
-    };
+    setIsSubmitting(true);
 
     try {
-      await addProject(cleanVals); // satisfies Omit<Project, "id" | "date">
+      // Format the date or use the current date as fallback
+      const formattedDate = publishDate 
+        ? format(publishDate, "MMMM d, yyyy")
+        : format(new Date(), "MMMM d, yyyy");
+      
+      // Prepare the project data
+      const newProject = {
+        title,
+        description,
+        content: "", // Content is no longer required
+        image,
+        url,
+        author,
+        date: formattedDate
+      };
+      
+      // Insert into Supabase
+      const { data, error } = await supabase
+        .from('projects')
+        .insert([newProject])
+        .select();
+      
+      if (error) {
+        throw error;
+      }
+      
       toast({
-        title: "Success",
-        description: "Project created successfully!",
+        title: "Success!",
+        description: "Your project has been published",
       });
-      reset();
-      navigate("/admin");
-    } catch (err) {
+
+      navigate("/manage-projects");
+    } catch (error) {
+      console.error("Error creating project:", error);
       toast({
         title: "Error",
-        description: "There was a problem creating the project.",
-        variant: "destructive"
+        description: "Failed to publish project. Please try again.",
+        variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    
+    try {
+      // Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2, 15)}-${Date.now()}.${fileExt}`;
+      const filePath = `project-images/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('maker-images')
+        .upload(filePath, file);
+      
+      if (uploadError) {
+        throw uploadError;
+      }
+      
+      // Get public URL
+      const { data } = supabase.storage
+        .from('maker-images')
+        .getPublicUrl(filePath);
+      
+      if (data && data.publicUrl) {
+        setImage(data.publicUrl);
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast({
+        title: "Upload failed",
+        description: "Could not upload the image. Please try again.",
+        variant: "destructive",
+      });
+      
+      // Fallback to FileReader for preview
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImage(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
   };
 
   return (
     <>
       <Helmet>
-        <title>Create Project - MakerBrains</title>
+        <title>Create Project - Maker Brains</title>
+        <meta name="description" content="Create a new project for Maker Brains" />
       </Helmet>
-      <div className="my-12 flex flex-col items-center justify-center">
-        <Card className="w-full max-w-xl shadow-lg border">
+      
+      <div className="max-w-4xl mx-auto">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">Create New Project</CardTitle>
+            <CardTitle className="text-3xl">Create New Project</CardTitle>
           </CardHeader>
           <CardContent>
-            <Form {...form}>
-              <form
-                onSubmit={handleSubmit(onSubmit)}
-                className="space-y-4"
-                autoComplete="off"
-              >
-                <FormField
-                  control={control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Title *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Project Title" {...field} required />
-                      </FormControl>
-                      <FormDescription>Use a clear, descriptive project name.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="url">Project URL</Label>
+                <Input
+                  id="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="Enter project URL"
+                  required
                 />
-                <FormField
-                  control={control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Short Description *</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="A brief summary of the project" {...field} required />
-                      </FormControl>
-                      <FormDescription>Keep it concise and informative.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="title">Project Title</Label>
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Enter project title"
+                  required
                 />
-                <FormField
-                  control={control}
-                  name="content"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Details</FormLabel>
-                      <FormControl>
-                        <Textarea placeholder="Full project details" {...field} />
-                      </FormControl>
-                      <FormDescription>Optional: Add further explanation, context, or background.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="description">Short Description</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Enter a brief description (shown in cards)"
+                  rows={3}
+                  required
                 />
-                <FormField
-                  control={control}
-                  name="author"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Author *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Project Author" {...field} required />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={control}
-                  name="image"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Image URL *</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Direct link to a project image"
-                          {...field}
-                          required
-                          inputMode="url"
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Example: https://example.com/myproject.jpg
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={control}
-                  name="url"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Project Link (optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Link to more project resources" {...field} inputMode="url" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div>
-                  <FormLabel>
-                    Project Steps <span className="text-destructive">*</span>
-                  </FormLabel>
-                  {errors?.steps?.message && (
-                    <FormMessage>{errors.steps.message as string}</FormMessage>
-                  )}
-                  {fields.map((item, idx) => (
-                    <div key={item.id} className="flex flex-col gap-1 mb-3">
-                      <StepEditor
-                        index={idx}
-                        // All steps always filled
-                        step={{
-                          title: getValues(`steps.${idx}.title`) ?? "",
-                          content: getValues(`steps.${idx}.content`) ?? ""
-                        }}
-                        onChange={(i, updatedStep) => update(i, updatedStep)}
-                        onRemove={() => remove(idx)}
-                        showRemove={fields.length > 1}
-                      />
-                      {(errors.steps?.[idx]?.title || errors.steps?.[idx]?.content) && (
-                        <FormMessage>
-                          {errors.steps?.[idx]?.title?.message || errors.steps?.[idx]?.content?.message}
-                        </FormMessage>
-                      )}
-                    </div>
-                  ))}
-                  <Button
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="image">Cover Image</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="image"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    placeholder="Enter image URL or upload an image"
+                  />
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                  />
+                  <Button 
                     type="button"
-                    variant="outline"
-                    className="mt-1"
-                    onClick={() => append(DEFAULT_STEP)}
+                    variant="secondary"
+                    onClick={triggerFileInput}
+                    disabled={isUploading}
                   >
-                    + Add Step
+                    {isUploading ? "Uploading..." : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload
+                      </>
+                    )}
                   </Button>
                 </div>
-                <Button
-                  className="w-full"
-                  type="submit"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="animate-spin mr-2" />
-                      Creating...
-                    </>
-                  ) : (
-                    "Create Project"
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  * Required fields
-                </p>
-              </form>
-            </Form>
+                {image && (
+                  <div className="mt-2">
+                    <img 
+                      src={image} 
+                      alt="Preview" 
+                      className="h-48 object-cover rounded-md"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/placeholder.svg";
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="author">Author</Label>
+                <Input
+                  id="author"
+                  value={author}
+                  onChange={(e) => setAuthor(e.target.value)}
+                  placeholder="Enter author name"
+                  required
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="publishDate">Published Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="publishDate"
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !publishDate && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {publishDate ? format(publishDate, "MMMM d, yyyy") : <span>Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={publishDate}
+                    onSelect={setPublishDate}
+                    initialFocus
+                    captionLayout="dropdown"
+                    fromYear={2000}
+                    toYear={new Date().getFullYear() + 5}
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  "Publish Project"
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
       </div>

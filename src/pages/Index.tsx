@@ -1,9 +1,9 @@
+
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProjects, Project } from "@/pages/ProjectContext";
 import { Link } from "react-router-dom";
 import { useEffect, useState, useCallback } from "react";
-import { collection, getDocs, query, orderBy, limit, startAfter, getDoc, DocumentData } from "firebase/firestore";
-import { db } from "@/config/firebase";
+import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Helmet } from "react-helmet-async";
 import SeoStructuredData from "@/components/SeoStructuredData";
@@ -15,84 +15,75 @@ const Index = () => {
   const [predefinedProjects, setPredefinedProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasMoreProjects, setHasMoreProjects] = useState(true);
-  const [lastLoadedDoc, setLastLoadedDoc] = useState<DocumentData | null>(null);
+  const [lastLoadedId, setLastLoadedId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   
   // Fetch projects with simplified error handling
   const fetchPredefinedProjects = useCallback(async (isInitial: boolean = false) => {
-    setIsLoading(true);
-    setError(null);
     try {
-      let q;
+      setError(null);
+      
+      // Setup query with pagination
+      let query = supabase
+        .from('projects')
+        .select('*')
+        .order('id', { ascending: false });
+      
+      // Set limits for pagination
       if (isInitial) {
-        q = query(collection(db, "projects"), orderBy("createdAt", "desc"), limit(9));
-      } else if (lastLoadedDoc) {
-        q = query(collection(db, "projects"), orderBy("createdAt", "desc"), startAfter(lastLoadedDoc), limit(6));
+        query = query.limit(9); // Load more initially to ensure content is visible
+      } else if (lastLoadedId !== null) {
+        query = query.lt('id', lastLoadedId).limit(6);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(`Database error: ${error.message}`);
+      }
+      
+      if (data) {
+        const projects = data as Project[];
+        console.log(`Fetched ${projects.length} projects`, projects);
+        
+        if (isInitial) {
+          setPredefinedProjects(projects);
+        } else {
+          setPredefinedProjects(prev => [...prev, ...projects]);
+        }
+        
+        if (projects.length > 0) {
+          setLastLoadedId(projects[projects.length - 1].id);
+        }
+        
+        setHasMoreProjects(projects.length === (isInitial ? 9 : 6));
       } else {
-        setHasMoreProjects(false);
-        setIsLoading(false);
-        return;
+        console.warn('No data returned from Supabase');
+        setPredefinedProjects([]);
       }
-
-      const querySnapshot = await getDocs(q);
-      const projects: Project[] = querySnapshot.docs.map((docSnap) => {
-        const d = docSnap.data() as {
-          title?: string;
-          description?: string;
-          content?: string;
-          image?: string;
-          url?: string;
-          author?: string;
-          date?: string;
-          createdAt?: { toDate?: () => Date };
-          steps?: { title: string; content: string }[]; // <-- Add steps for type safety
-        };
-        return {
-          id: docSnap.id,
-          title: d.title ?? "",
-          description: d.description ?? "",
-          content: d.content ?? "",
-          image: d.image ?? "",
-          url: d.url ?? "",
-          author: d.author ?? "",
-          date: d.date ?? (d.createdAt?.toDate?.().toLocaleDateString?.('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? ""),
-          steps: d.steps ?? [], // Ensure steps is present for Project type
-        };
-      });
-
-      if (projects.length > 0) {
-        setLastLoadedDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
-      }
-
-      if (isInitial) {
-        setPredefinedProjects(projects);
-      } else {
-        setPredefinedProjects((prev) => [...prev, ...projects]);
-      }
-
-      setHasMoreProjects(querySnapshot.docs.length === (isInitial ? 9 : 6));
-    } catch (err: any) {
-      setError(err.message || "Failed to load projects. Please check your connection.");
-      setHasMoreProjects(false);
+    } catch (error) {
+      console.error('Error in fetchPredefinedProjects:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load projects. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
-  }, [lastLoadedDoc]);
-
+  }, [lastLoadedId]);
+  
   // Initial fetch on component mount
   useEffect(() => {
     console.log('Starting initial project fetch...');
     fetchPredefinedProjects(true);
   }, []);
-
+  
   // Handle loading more projects
   const loadMoreProjects = useCallback(() => {
-    if (!isLoading && hasMoreProjects && lastLoadedDoc) {
+    if (!isLoading && hasMoreProjects && lastLoadedId !== null) {
       console.log('Loading more projects...');
       setIsLoading(true);
       fetchPredefinedProjects(false);
     }
-  }, [isLoading, hasMoreProjects, lastLoadedDoc, fetchPredefinedProjects]);
+  }, [isLoading, hasMoreProjects, lastLoadedId, fetchPredefinedProjects]);
 
   // Setup intersection observer for lazy loading
   useEffect(() => {
@@ -174,7 +165,7 @@ const Index = () => {
                 setError(null);
                 setIsLoading(true);
                 setPredefinedProjects([]);
-                setLastLoadedDoc(null);
+                setLastLoadedId(null);
                 fetchPredefinedProjects(true);
               }}
               className="ml-2 underline hover:no-underline"

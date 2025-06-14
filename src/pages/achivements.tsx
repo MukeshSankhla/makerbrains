@@ -1,18 +1,19 @@
+
 import React, { useEffect, useState } from "react";
 import { FaTrophy, FaMedal, FaStar, FaLink, FaAward, FaRegNewspaper } from "react-icons/fa";
+import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { db } from "@/config/firebase";
 
 interface Achievement {
-  id: string;
+  id: number;
   year: number;
   title: string;
   link: string;
   icon: string;
 }
+
 interface Recognition {
-  id: string;
+  id: number;
   year: number;
   title: string;
   link: string;
@@ -26,20 +27,31 @@ export default function AchievementsAndRecognition() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch achievements from Firestore
-        const achievementsQuery = query(collection(db, "achievements"), orderBy("year", "desc"));
-        const achievementsSnap = await getDocs(achievementsQuery);
-        setAchievements(achievementsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Achievement)));
-        // Fetch recognitions from Firestore
-        const recognitionsQuery = query(collection(db, "recognitions"), orderBy("year", "desc"));
-        const recognitionsSnap = await getDocs(recognitionsQuery);
-        setRecognitions(recognitionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Recognition)));
+        // Fetch achievements
+        const { data: achievementsData, error: achievementsError } = await supabase
+          .from('achievements')
+          .select('*')
+          .order('year', { ascending: false });
+        
+        if (achievementsError) throw achievementsError;
+        
+        // Fetch recognitions
+        const { data: recognitionsData, error: recognitionsError } = await supabase
+          .from('recognitions')
+          .select('*')
+          .order('year', { ascending: false });
+        
+        if (recognitionsError) throw recognitionsError;
+        
+        setAchievements(achievementsData || []);
+        setRecognitions(recognitionsData || []);
       } catch (error) {
-        console.error("Error fetching Firestore data:", error);
+        console.error("Error fetching data:", error);
       } finally {
         setIsLoading(false);
       }
     };
+    
     fetchData();
   }, []);
 

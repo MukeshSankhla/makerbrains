@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -31,7 +32,6 @@ import ManageMagazines from "./pages/ManageMagazines";
 import ManageSponsors from "./pages/ManageSponsors";
 import Contact from "./pages/ContactUs";
 import { useAdminAuth } from "./contexts/AdminAuthContext";
-import ManageHomeContent from "./pages/ManageHomeContent";
 
 const queryClient = new QueryClient();
 
@@ -51,7 +51,6 @@ const App = () => (
     <HelmetProvider>
       <ThemeProvider defaultTheme="system" storageKey="maker-brains-theme">
         <AdminAuthProvider>
-          {/* Use the Firebase ProjectProvider only */}
           <ProjectProvider>
             <ShopProvider>
               <TooltipProvider>
@@ -117,11 +116,6 @@ const App = () => (
                         <Route path="/manage-sponsors" element={
                           <ProtectedRoute>
                             <ManageSponsors />
-                          </ProtectedRoute>
-                        } />
-                        <Route path="/manage-home-content" element={
-                          <ProtectedRoute>
-                            <ManageHomeContent />
                           </ProtectedRoute>
                         } />
                       </Routes>

@@ -1,12 +1,12 @@
+
 import { Card, CardHeader } from "@/components/ui/card";
 import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
-import { db } from "@/config/firebase";
 
 interface Magazine {
-  id: string;
+  id: number;
   title: string;
   image_url: string;
   website_url: string;
@@ -15,24 +15,75 @@ interface Magazine {
 export default function Magazines() {
   const [magazines, setMagazines] = useState<Magazine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
+  const { toast } = useToast();
+  
   useEffect(() => {
     let isMounted = true;
+    let retryCount = 0;
+    const maxRetries = 5;
+    const retryDelay = 3000; // 3 seconds between retries
+    
+    // Check cache first
+    const cachedData = sessionStorage.getItem('magazines-data');
+    const cacheTimestamp = sessionStorage.getItem('magazines-timestamp');
+    const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+    
+    if (cachedData && cacheTimestamp) {
+      const timestamp = parseInt(cacheTimestamp, 10);
+      if (Date.now() - timestamp < cacheExpiry) {
+        // Use cached data
+        setMagazines(JSON.parse(cachedData));
+        setIsLoading(false);
+        return;
+      }
+    }
+    
     const fetchMagazines = async () => {
       try {
-        const magazinesQuery = query(collection(db, "magazines"), orderBy("id", "desc"));
-        const querySnapshot = await getDocs(magazinesQuery);
+        const { data, error } = await supabase
+          .from('magazines')
+          .select('*')
+          .order('id', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching magazines:', error);
+          // Only attempt retries if we're still mounted
+          if (isMounted && retryCount < maxRetries) {
+            retryCount++;
+            console.log(`Retrying fetch (${retryCount}/${maxRetries})...`);
+            setTimeout(fetchMagazines, retryDelay);
+          }
+          return;
+        }
+        
+        // Only update state if component is still mounted
         if (isMounted) {
-          setMagazines(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Magazine)));
+          const magazineData = data || [];
+          setMagazines(magazineData);
           setIsLoading(false);
+          
+          // Cache the data
+          sessionStorage.setItem('magazines-data', JSON.stringify(magazineData));
+          sessionStorage.setItem('magazines-timestamp', Date.now().toString());
         }
       } catch (error: any) {
-        if (isMounted) setIsLoading(false);
-        console.error("Error fetching magazines:", error);
+        console.error('Unexpected error fetching magazines:', error);
+        // Retry on unexpected errors too
+        if (isMounted && retryCount < maxRetries) {
+          retryCount++;
+          console.log(`Retrying fetch after error (${retryCount}/${maxRetries})...`);
+          setTimeout(fetchMagazines, retryDelay);
+        }
       }
     };
+    
+    // Start fetching
     fetchMagazines();
-    return () => { isMounted = false; };
+    
+    // Cleanup function to prevent memory leaks and state updates after unmount
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (

@@ -1,86 +1,83 @@
-import { useState } from "react";
+
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { Loader2 } from "lucide-react";
-import { Helmet } from "react-helmet-async";
+import { Form, FormItem, FormLabel, FormControl, FormDescription, FormMessage, FormField } from "@/components/ui/form";
+import { useForm, useFieldArray } from "react-hook-form";
+import * as z from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useProjects } from "@/pages/ProjectContext";
 import StepEditor from "@/components/StepEditor";
+import React from "react";
+
+const projectFormSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters"),
+  description: z.string().min(10, "Description must be at least 10 characters"),
+  content: z.string().optional(),
+  author: z.string().min(2, "Author is required"),
+  image: z.string().url("Must be a valid image URL"),
+  url: z.string().url("Must be a valid URL").optional().or(z.literal("")),
+  steps: z
+    .array(
+      z.object({
+        title: z.string().min(2, "Title required"),
+        content: z.string().min(5, "Step details required"),
+      })
+    )
+    .min(1, "At least one step is required"),
+});
+
+type ProjectFormValues = z.infer<typeof projectFormSchema>;
+
+const DEFAULT_STEP = { title: "", content: "" };
 
 const CreateProject = () => {
   const { addProject } = useProjects();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [content, setContent] = useState("");
-  const [author, setAuthor] = useState("");
-  const [image, setImage] = useState("");
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [steps, setSteps] = useState([{ title: "", content: "" }]);
-
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const handleStepChange = (idx: number, updatedStep: { title: string; content: string }) => {
-    setSteps(steps =>
-      steps.map((step, i) => (i === idx ? updatedStep : step))
-    );
-  };
+  const form = useForm<ProjectFormValues>({
+    resolver: zodResolver(projectFormSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      content: "",
+      author: "",
+      image: "",
+      url: "",
+      steps: [DEFAULT_STEP],
+    },
+    mode: "onBlur",
+  });
 
-  const handleAddStep = () => {
-    setSteps(steps => [...steps, { title: "", content: "" }]);
-  };
+  const {
+    control,
+    register,
+    reset,
+    setValue,
+    getValues,
+    handleSubmit,
+    formState: { isSubmitting, errors }
+  } = form;
 
-  const handleRemoveStep = (idx: number) => {
-    setSteps(steps => steps.filter((_, i) => i !== idx));
-  };
+  const { fields, append, remove, update } = useFieldArray({
+    control,
+    name: "steps",
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    if (!title || !description || !image || !author) {
-      toast({
-        title: "Error",
-        description: "Please fill all required fields.",
-        variant: "destructive"
-      });
-      setLoading(false);
-      return;
-    }
-
-    // Check steps
-    if (
-      !steps.length ||
-      steps.some(step => !step.title.trim() || !step.content.trim())
-    ) {
-      toast({
-        title: "Error",
-        description: "Please add details for each step.",
-        variant: "destructive",
-      });
-      setLoading(false);
-      return;
-    }
-
+  const onSubmit = async (values: ProjectFormValues) => {
     try {
-      await addProject({
-        title,
-        description,
-        content,
-        steps, // Save steps as an array in Firestore
-        image,
-        url,
-        author,
-      });
+      await addProject(values);
       toast({
         title: "Success",
         description: "Project created successfully!",
       });
+      reset();
       navigate("/admin");
     } catch (err) {
       toast({
@@ -88,7 +85,6 @@ const CreateProject = () => {
         description: "There was a problem creating the project.",
         variant: "destructive"
       });
-      setLoading(false);
     }
   };
 
@@ -103,106 +99,155 @@ const CreateProject = () => {
             <CardTitle className="text-2xl">Create New Project</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="title">Title *</Label>
-                <Input
-                  id="title"
-                  placeholder="Project Title"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  required
+            <Form {...form}>
+              <form
+                onSubmit={handleSubmit(onSubmit)}
+                className="space-y-4"
+                autoComplete="off"
+              >
+                <FormField
+                  control={control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Title *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Project Title" {...field} required />
+                      </FormControl>
+                      <FormDescription>Use a clear, descriptive project name.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div>
-                <Label htmlFor="description">Short Description *</Label>
-                <Textarea
-                  id="description"
-                  placeholder="A brief summary of the project"
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  required
+                <FormField
+                  control={control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Short Description *</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="A brief summary of the project" {...field} required />
+                      </FormControl>
+                      <FormDescription>Keep it concise and informative.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div>
-                <Label htmlFor="content">Details</Label>
-                <Textarea
-                  id="content"
-                  placeholder="Full project details"
-                  value={content}
-                  onChange={e => setContent(e.target.value)}
+                <FormField
+                  control={control}
+                  name="content"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Details</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Full project details" {...field} />
+                      </FormControl>
+                      <FormDescription>Optional: Add further explanation, context, or background.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div>
-                <Label htmlFor="author">Author *</Label>
-                <Input
-                  id="author"
-                  placeholder="Project Author"
-                  value={author}
-                  onChange={e => setAuthor(e.target.value)}
-                  required
+                <FormField
+                  control={control}
+                  name="author"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Author *</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Project Author" {...field} required />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div>
-                <Label htmlFor="image">Image URL *</Label>
-                <Input
-                  id="image"
-                  placeholder="Direct link to a project image"
-                  value={image}
-                  onChange={e => setImage(e.target.value)}
-                  required
+                <FormField
+                  control={control}
+                  name="image"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Image URL *</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="Direct link to a project image"
+                          {...field}
+                          required
+                          inputMode="url"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Example: https://example.com/myproject.jpg
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div>
-                <Label htmlFor="url">Project Link (optional)</Label>
-                <Input
-                  id="url"
-                  placeholder="Link to more project resources"
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
+                <FormField
+                  control={control}
+                  name="url"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Project Link (optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Link to more project resources" {...field} inputMode="url" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-              </div>
-              <div>
-                <Label>Project Steps <span className="text-destructive">*</span></Label>
                 <div>
-                  {steps.map((step, idx) => (
-                    <StepEditor
-                      key={idx}
-                      index={idx}
-                      step={step}
-                      onChange={handleStepChange}
-                      onRemove={handleRemoveStep}
-                      showRemove={steps.length > 1}
-                    />
+                  <FormLabel>
+                    Project Steps <span className="text-destructive">*</span>
+                  </FormLabel>
+                  {/* Validation for steps array */}
+                  {errors?.steps?.message && (
+                    <FormMessage>{errors.steps.message as string}</FormMessage>
+                  )}
+                  {/* Render each step via StepEditor */}
+                  {fields.map((item, idx) => (
+                    <div key={item.id} className="flex flex-col gap-1 mb-3">
+                      <StepEditor
+                        index={idx}
+                        step={getValues(`steps.${idx}`)}
+                        onChange={(i, updatedStep) => update(i, updatedStep)}
+                        onRemove={() => remove(idx)}
+                        showRemove={fields.length > 1}
+                      />
+                      {/* Field-level validation errors for this step */}
+                      {(errors.steps?.[idx]?.title || errors.steps?.[idx]?.content) && (
+                        <FormMessage>
+                          {errors.steps?.[idx]?.title?.message || errors.steps?.[idx]?.content?.message}
+                        </FormMessage>
+                      )}
+                    </div>
                   ))}
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleAddStep}
                     className="mt-1"
+                    onClick={() => append(DEFAULT_STEP)}
                   >
                     + Add Step
                   </Button>
                 </div>
-              </div>
-              <Button
-                className="w-full"
-                type="submit"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create Project"
-                )}
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                * Required fields
-              </p>
-            </form>
+                <Button
+                  className="w-full"
+                  type="submit"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="animate-spin mr-2" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Project"
+                  )}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  * Required fields
+                </p>
+              </form>
+            </Form>
           </CardContent>
         </Card>
       </div>

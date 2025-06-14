@@ -39,13 +39,13 @@ const Index = () => {
         const d = docSnap.data();
         return {
           id: docSnap.id,
-          title: d.title,
-          description: d.description,
-          content: d.content || "",
-          image: d.image,
-          url: d.url || "",
-          author: d.author,
-          date: d.date || (d.createdAt?.toDate?.().toLocaleDateString?.('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? ""),
+          title: d.title ?? "",
+          description: d.description ?? "",
+          content: d.content ?? "",
+          image: d.image ?? "",
+          url: d.url ?? "",
+          author: d.author ?? "",
+          date: d.date ?? (d.createdAt?.toDate?.().toLocaleDateString?.('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? ""),
         };
       });
 

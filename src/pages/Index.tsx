@@ -45,6 +45,7 @@ const Index = () => {
           author?: string;
           date?: string;
           createdAt?: { toDate?: () => Date };
+          steps?: { title: string; content: string }[]; // <-- Add steps for type safety
         };
         return {
           id: docSnap.id,
@@ -55,6 +56,7 @@ const Index = () => {
           url: d.url ?? "",
           author: d.author ?? "",
           date: d.date ?? (d.createdAt?.toDate?.().toLocaleDateString?.('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? ""),
+          steps: d.steps ?? [], // Ensure steps is present for Project type
         };
       });
 

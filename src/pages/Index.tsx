@@ -36,7 +36,16 @@ const Index = () => {
 
       const querySnapshot = await getDocs(q);
       const projects: Project[] = querySnapshot.docs.map((docSnap) => {
-        const d = docSnap.data();
+        const d = docSnap.data() as {
+          title?: string;
+          description?: string;
+          content?: string;
+          image?: string;
+          url?: string;
+          author?: string;
+          date?: string;
+          createdAt?: { toDate?: () => Date };
+        };
         return {
           id: docSnap.id,
           title: d.title ?? "",

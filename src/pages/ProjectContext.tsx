@@ -1,11 +1,21 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from "@/integrations/supabase/client";
-import { Tables } from "@/integrations/supabase/types";
+import { db } from "@/config/firebase";
+import {
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  addDoc,
+  doc,
+  updateDoc,
+  getDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 
-// Define the project type
+// Project type matches old interface for compatibility
 export interface Project {
-  id: number;
+  id: string;
   title: string;
   description: string;
   content?: string;
@@ -18,7 +28,7 @@ export interface Project {
 interface ProjectContextType {
   projects: Project[];
   addProject: (project: Omit<Project, 'id' | 'date'>) => void;
-  getProject: (id: number) => Project | undefined;
+  getProject: (id: string) => Project | undefined;
   updateProject: (project: Project) => void;
 }
 
@@ -26,84 +36,78 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<Project[]>([]);
-  
-  // Fetch projects from Supabase on component mount
+
+  // Fetch all projects from Firestore (order by most recent)
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const { data, error } = await supabase
-          .from('projects')
-          .select('*')
-          .order('id', { ascending: false });
-        
-        if (error) {
-          console.error('Error fetching projects:', error);
-          return;
-        }
-        
-        if (data) {
-          setProjects(data as Project[]);
-        }
+        const q = query(collection(db, "projects"), orderBy('createdAt', 'desc'));
+        const querySnapshot = await getDocs(q);
+        const data: Project[] = querySnapshot.docs.map(docSnap => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            title: d.title,
+            description: d.description,
+            content: d.content || "",
+            image: d.image,
+            url: d.url || "",
+            author: d.author,
+            date: d.date || (d.createdAt?.toDate?.().toLocaleDateString?.('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) ?? ""),
+          }
+        });
+        setProjects(data);
       } catch (error) {
-        console.error('Error in fetchProjects:', error);
+        console.error('Error fetching projects:', error);
       }
     };
-    
+
     fetchProjects();
   }, []);
 
+  // Add a project to Firestore
   const addProject = async (projectData: Omit<Project, 'id' | 'date'>) => {
-    const newProject = {
-      ...projectData,
-      date: new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      })
-    };
-    
+    const dateString = new Date().toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    });
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .insert([newProject])
-        .select();
-      
-      if (error) {
-        console.error('Error adding project:', error);
-        return;
-      }
-      
-      if (data && data.length > 0) {
-        setProjects(prevProjects => [data[0] as Project, ...prevProjects]);
-      }
+      const docRef = await addDoc(collection(db, "projects"), {
+        ...projectData,
+        // For display, also store in original "date" field as string
+        date: dateString,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setProjects(prev => [{
+        id: docRef.id,
+        ...projectData,
+        date: dateString,
+      }, ...prev]);
     } catch (error) {
-      console.error('Error in addProject:', error);
+      console.error('Error adding project:', error);
     }
   };
 
-  const getProject = (id: number) => {
+  // Get a single project by ID from the local state (if already loaded)
+  const getProject = (id: string) => {
     return projects.find(project => project.id === id);
   };
 
+  // Update an existing project in Firestore
   const updateProject = async (updatedProject: Project) => {
     try {
-      const { error } = await supabase
-        .from('projects')
-        .update(updatedProject)
-        .eq('id', updatedProject.id);
-        
-      if (error) {
-        console.error('Error updating project:', error);
-        return;
-      }
-      
-      setProjects(prevProjects => 
-        prevProjects.map(project => 
+      const projectRef = doc(db, "projects", updatedProject.id);
+      await updateDoc(projectRef, {
+        ...updatedProject,
+        updatedAt: serverTimestamp(),
+      });
+      setProjects(prev =>
+        prev.map(project =>
           project.id === updatedProject.id ? updatedProject : project
         )
       );
     } catch (error) {
-      console.error('Error in updateProject:', error);
+      console.error('Error updating project:', error);
     }
   };
 
